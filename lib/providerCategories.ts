@@ -7,7 +7,8 @@ export const PROVIDER_CATEGORIES = [
 ] as const;
 
 export type ProviderCategory = (typeof PROVIDER_CATEGORIES)[number];
-
+export const PROVIDER_CATEGORIES = [];
+export const PROVIDER_CATEGORY_LABELS = {};
 export const PROVIDER_CATEGORY_LABELS: Record<ProviderCategory, string> = {
 repair_shop: "Truck & Auto Repair Shop",
 parts_store: "Truck & Auto Parts Store",
