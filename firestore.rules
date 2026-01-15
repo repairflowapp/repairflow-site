@@ -1,0 +1,266 @@
+rules_version = '2';
+service cloud.firestore {
+match /databases/{database}/documents {
+
+function signedIn() { return request.auth != null; }
+function uid() { return request.auth.uid; }
+
+function reqDoc(jobId) {
+return get(/databases/$(database)/documents/roadsideRequests/$(jobId)).data;
+}
+
+// ✅ Customer if EITHER field matches
+function isCustomerReq(data) {
+return signedIn() && (
+(data.createdByUid != null && data.createdByUid == uid()) ||
+(data.customerUid != null && data.customerUid == uid())
+);
+}
+
+function isProviderOnReq(data) {
+return signedIn() && data.providerId == uid();
+}
+
+function providerHasBid(jobId) {
+return signedIn() &&
+exists(/databases/$(database)/documents/roadsideRequests/$(jobId)/bids/$(uid()));
+}
+
+function providerDispatchAllowed(oldData, newData) {
+return newData.diff(oldData).changedKeys().hasOnly([
+"status",
+"providerAssignedToName",
+"providerAssignedToPhone",
+"providerAssignedAt",
+"enrouteAt",
+"onSiteAt",
+"onsiteAt",
+"inProgressAt",
+"completedAt",
+"updatedAt"
+]) && (
+(newData.status == oldData.status) ||
+(oldData.status == "accepted" && (newData.status == "assigned" || newData.status == "enroute")) ||
+(oldData.status == "assigned" && newData.status == "enroute") ||
+(oldData.status == "enroute" && (
+newData.status == "on_site" ||
+newData.status == "onsite" ||
+newData.status == "in_progress"
+)) ||
+((oldData.status == "on_site" || oldData.status == "onsite") && newData.status == "in_progress") ||
+(oldData.status == "in_progress" && newData.status == "completed")
+);
+}
+
+// =========================
+// ✅ ROADSIDEREQUESTS (EXTERNAL JOBS)
+// =========================
+match /roadsideRequests/{jobId} {
+
+// Read:
+// - customer
+// - selected provider
+// - any signed-in provider can read open/bidding
+allow read: if signedIn() && (
+isCustomerReq(resource.data) ||
+isProviderOnReq(resource.data) ||
+(resource.data.status in ["open","bidding"])
+);
+
+// Create: creator must be signed-in user
+allow create: if signedIn()
+&& request.resource.data.createdByUid == uid()
+&& (
+request.resource.data.customerUid == null ||
+request.resource.data.customerUid == uid()
+);
+
+// Customer update
+allow update: if isCustomerReq(resource.data);
+
+// Provider confirm/decline path
+allow update: if isProviderOnReq(resource.data)
+&& resource.data.status == "pending_provider_confirmation"
+&& (
+request.resource.data.status == "pending_customer_confirmation"
+||
+(request.resource.data.status == "open"
+&& request.resource.data.providerId == null
+&& request.resource.data.acceptedBidId == null)
+)
+&& request.resource.data.diff(resource.data).changedKeys().hasOnly([
+"status",
+"providerId",
+"acceptedBidId",
+"acceptedAt",
+"providerConfirmedAt",
+"updatedAt"
+]);
+
+// Customer confirms after provider confirms
+allow update: if isCustomerReq(resource.data)
+&& resource.data.status == "pending_customer_confirmation"
+&& request.resource.data.status == "accepted"
+&& request.resource.data.diff(resource.data).changedKeys().hasOnly([
+"status",
+"customerConfirmedAt",
+"updatedAt"
+]);
+
+// Provider dispatch buttons
+allow update: if isProviderOnReq(resource.data)
+&& providerDispatchAllowed(resource.data, request.resource.data);
+
+// Bids
+match /bids/{providerId} {
+allow read: if signedIn() && (
+uid() == providerId ||
+isCustomerReq(reqDoc(jobId))
+);
+
+allow create, update: if signedIn() && uid() == providerId;
+
+// customer can counter/reject/etc.
+allow update: if signedIn() && isCustomerReq(reqDoc(jobId));
+}
+
+// Chat threads (EXTERNAL JOB CHAT)
+match /chatThreads/{threadId} {
+
+// ✅ allow reading for customer, provider on job, or any provider who bid
+allow read: if signedIn() && (
+isCustomerReq(reqDoc(jobId)) ||
+isProviderOnReq(reqDoc(jobId)) ||
+providerHasBid(jobId)
+);
+
+// ✅ Allow thread doc creation so providers can actually chat
+allow create, update: if signedIn() && (
+isCustomerReq(reqDoc(jobId)) ||
+isProviderOnReq(reqDoc(jobId)) ||
+providerHasBid(jobId)
+);
+
+match /messages/{messageId} {
+allow read, create: if signedIn() && (
+isCustomerReq(reqDoc(jobId)) ||
+isProviderOnReq(reqDoc(jobId)) ||
+providerHasBid(jobId)
+);
+}
+}
+
+// Legacy preBidChat
+match /preBidChat/{messageId} {
+allow read, create: if signedIn() && (
+isCustomerReq(reqDoc(jobId)) ||
+isProviderOnReq(reqDoc(jobId)) ||
+providerHasBid(jobId)
+);
+}
+}
+
+// =========================
+// ✅ PROVIDERBIDS
+// =========================
+match /providerBids/{providerUid}/jobs/{jobId} {
+allow read, create, update, delete: if signedIn() && uid() == providerUid;
+}
+
+// =========================
+// ✅ BUSINESS PROFILES
+// =========================
+match /businessProfiles/{providerUid} {
+allow read: if signedIn();
+allow create, update: if signedIn() && uid() == providerUid;
+}
+
+// =========================
+// ✅ USERS + NOTIFICATIONS
+// =========================
+match /users/{userId}/notifications/{nid} {
+allow read: if signedIn() && uid() == userId;
+allow create: if signedIn();
+}
+
+match /users/{userId} {
+allow read: if signedIn() && uid() == userId;
+allow create, update: if signedIn() && uid() == userId;
+}
+
+// =========================
+// ✅ PROVIDERS (EMPLOYEES + DISPATCH JOBS)
+// =========================
+match /providers/{providerUid} {
+
+// Provider can read their provider doc; (optional) anyone signed-in can read
+allow read: if signedIn();
+allow create, update, delete: if signedIn() && uid() == providerUid;
+
+// ✅ FIX: provider locations subcollection
+// providers/{providerUid}/locations/{locationId}
+match /locations/{locationId} {
+allow read, create, update, delete: if signedIn() && uid() == providerUid;
+}
+
+// Employees under provider
+match /employees/{employeeUid} {
+// provider manages; employee can read themselves
+allow read: if signedIn() && (uid() == providerUid || uid() == employeeUid);
+allow create, update, delete: if signedIn() && uid() == providerUid;
+}
+
+// Dispatch jobs under provider
+match /dispatchJobs/{dispatchJobId} {
+
+// Provider full access
+allow read, create, update, delete: if signedIn() && uid() == providerUid;
+
+// ✅ Model A: assigned employee can read ONLY assigned job
+allow read: if signedIn()
+&& resource.data.assignedTo != null
+&& resource.data.assignedTo == uid();
+
+// Chats under provider dispatch job:
+// providers/{providerUid}/dispatchJobs/{dispatchJobId}/chatThreads/{room}/messages/{messageId}
+match /chatThreads/{room} {
+allow read: if signedIn() && (
+uid() == providerUid ||
+(get(/databases/$(database)/documents/providers/$(providerUid)/dispatchJobs/$(dispatchJobId)).data.assignedTo == uid())
+);
+
+match /messages/{messageId} {
+allow read, create: if signedIn() && (
+uid() == providerUid ||
+(get(/databases/$(database)/documents/providers/$(providerUid)/dispatchJobs/$(dispatchJobId)).data.assignedTo == uid())
+);
+}
+}
+}
+}
+
+// =========================
+// ✅ OPTIONAL COMPAT: if your code still uses a TOP-LEVEL dispatchJobs collection
+// dispatchJobs/{dispatchJobId}/chats/{room}/messages/{messageId}
+// =========================
+match /dispatchJobs/{dispatchJobId} {
+
+// Provider owns by providerId field; employee allowed if assignedTo == uid
+allow read, create, update, delete: if signedIn() && (
+(request.resource.data.providerId == uid()) ||
+(resource.data.providerId == uid()) ||
+(resource.data.assignedTo != null && resource.data.assignedTo == uid())
+);
+
+match /chats/{room} {
+match /messages/{messageId} {
+allow read, create: if signedIn() && (
+(get(/databases/$(database)/documents/dispatchJobs/$(dispatchJobId)).data.providerId == uid()) ||
+(get(/databases/$(database)/documents/dispatchJobs/$(dispatchJobId)).data.assignedTo == uid())
+);
+}
+}
+}
+
+}
+}

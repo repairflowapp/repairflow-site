@@ -1,0 +1,1 @@
+{"name":"functions","private":true,"main":"lib/index.js","engines":{"node":"20"},"scripts":{"build":"tsc"},"dependencies":{"@vonage/server-sdk":"^3.25.1","firebase-admin":"^13.6.0","firebase-functions":"^7.0.3","twilio":"^5.11.1"},"devDependencies":{"rimraf":"^5.0.10","typescript":"^5.6.3"}}

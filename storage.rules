@@ -1,0 +1,66 @@
+rules_version = '2';
+service firebase.storage {
+match /b/{bucket}/o {
+
+function signedIn() { return request.auth != null; }
+function uid() { return request.auth.uid; }
+
+// Provider paperwork: provider can read/write ONLY their own files
+match /providerDocs/{providerUid}/{allPaths=**} {
+allow read, write: if signedIn() && uid() == providerUid;
+}
+
+// Chat media: provider uploads under a request
+match /chatMedia/roadsideRequests/{requestId}/provider/{providerUid}/{allPaths=**} {
+allow read, write: if signedIn() && uid() == providerUid;
+}
+
+// Chat media: customer uploads under a request
+match /chatMedia/roadsideRequests/{requestId}/customer/{customerUid}/{allPaths=**} {
+allow read, write: if signedIn() && uid() == customerUid;
+}
+
+// =========================
+// ✅ Dispatch job media (recommended path used by JobChat.tsx)
+// jobMedia/providers/{providerUid}/dispatchJobs/{dispatchJobId}/{room}/{senderUid}/{file}
+// =========================
+match /jobMedia/providers/{providerUid}/dispatchJobs/{dispatchJobId}/{room}/{senderUid}/{allPaths=**} {
+
+function assignedEmployee() {
+return firestore.get(
+/databases/(default)/documents/providers/$(providerUid)/dispatchJobs/$(dispatchJobId)
+).data.assignedTo;
+}
+
+// Provider can read/write all chat media for their dispatch jobs
+allow read, write: if signedIn() && uid() == providerUid;
+
+// Assigned employee can read/write only for assigned job
+allow read, write: if signedIn() && assignedEmployee() == uid();
+}
+
+// =========================
+// ✅ Dispatch chat media (compat with your DispatchChat.tsx path)
+// dispatchMedia/dispatchJobs/{jobId}/{room}/{senderId}/{file}
+// =========================
+match /dispatchMedia/dispatchJobs/{dispatchJobId}/{room}/{senderUid}/{allPaths=**} {
+
+function job() {
+return firestore.get(
+/databases/(default)/documents/dispatchJobs/$(dispatchJobId)
+).data;
+}
+
+allow read, write: if signedIn() && (
+job().providerId == uid() ||
+(job().assignedTo != null && job().assignedTo == uid())
+);
+}
+
+// Everything else denied
+match /{allPaths=**} {
+allow read, write: if false;
+}
+}
+}
+
