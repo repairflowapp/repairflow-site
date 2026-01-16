@@ -14,13 +14,12 @@ messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
 appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
 
-// ✅ Client-safe storage export
-export const storage =
-typeof window !== "undefined" ? getStorage(app) : null;
+// ✅ Storage export (safe)
+export const storage = getStorage(app);
 

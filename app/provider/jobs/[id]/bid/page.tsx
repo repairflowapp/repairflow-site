@@ -1,3 +1,4 @@
+// app/provider/jobs/[id]/bid/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -52,18 +53,26 @@ return job.pickupAddress || job.locationText || "—";
 
 useEffect(() => {
 return onAuthStateChanged(auth, async (u) => {
+setLoading(true);
+setErr(null);
+
 if (!u) {
 router.push("/auth/sign-in");
 return;
 }
 setUid(u.uid);
 
-if (!jobId) return;
+if (!jobId) {
+setErr("Missing job id.");
+setLoading(false);
+return;
+}
 
 try {
 const snap = await getDoc(doc(db, "roadsideRequests", jobId));
 if (!snap.exists()) {
 setErr("Job not found.");
+setJob(null);
 setLoading(false);
 return;
 }
@@ -71,6 +80,7 @@ setJob(snap.data() as any);
 setLoading(false);
 } catch (e: any) {
 setErr(e?.message ?? "Failed to load job.");
+setJob(null);
 setLoading(false);
 }
 });
@@ -100,7 +110,9 @@ try {
 let providerName = "Provider";
 try {
 const profSnap = await getDoc(doc(db, "businessProfiles", uid));
-const prof = (profSnap.exists() ? (profSnap.data() as ProviderProfile) : {}) as any;
+const prof = (profSnap.exists()
+? (profSnap.data() as ProviderProfile)
+: {}) as any;
 providerName = prof?.businessName || "Provider";
 } catch {}
 
@@ -212,7 +224,9 @@ Back
 
 <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
 <div>
-<label className="block text-sm font-medium mb-1">Bid Amount ($) *</label>
+<label className="block text-sm font-medium mb-1">
+Bid Amount ($) *
+</label>
 <input
 className="border rounded-lg p-2 w-full"
 value={price}
@@ -223,7 +237,9 @@ placeholder="450"
 </div>
 
 <div>
-<label className="block text-sm font-medium mb-1">ETA (minutes) *</label>
+<label className="block text-sm font-medium mb-1">
+ETA (minutes) *
+</label>
 <input
 className="border rounded-lg p-2 w-full"
 value={eta}
@@ -235,7 +251,9 @@ placeholder="90"
 </div>
 
 <div className="mt-3">
-<label className="block text-sm font-medium mb-1">Message (optional)</label>
+<label className="block text-sm font-medium mb-1">
+Message (optional)
+</label>
 <textarea
 className="border rounded-lg p-2 w-full"
 value={message}
@@ -256,7 +274,8 @@ className="mt-4 w-full bg-black text-white rounded-lg py-3 font-medium disabled:
 
 {/* Pre-bid chat */}
 <div className="border border-gray-200 rounded-2xl p-6">
-<PreBidChat jobId={jobId as string} />
+{/* ✅ PreBidChat expects requestId (not jobId) */}
+<PreBidChat requestId={jobId} roleLabel="provider" />
 </div>
 </div>
 </main>

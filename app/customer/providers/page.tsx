@@ -5,12 +5,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { PROVIDER_CATEGORIES, PROVIDER_CATEGORY_LABELS } from "@/lib/providerCategories";
+import {
+PROVIDER_CATEGORIES,
+PROVIDER_CATEGORY_LABELS,
+type ProviderCategory,
+} from "@/lib/providerCategories";
 
 type Provider = {
 id: string;
 
-// common fields you may have
 businessName?: string;
 phone?: string;
 
@@ -18,14 +21,13 @@ phone?: string;
 categories?: string[];
 services?: string[];
 
-addressText?: string; // your onboarding saves this
-addressFormatted?: string; // some older docs use this
-serviceBaseLocationText?: string; // if you ever add this
+addressText?: string;
+addressFormatted?: string;
+serviceBaseLocationText?: string;
 
 ratingAvg?: number;
 ratingCount?: number;
 
-// optional location fields if you added them
 baseLat?: number;
 baseLng?: number;
 };
@@ -37,34 +39,38 @@ return String(s ?? "")
 .trim();
 }
 
-function getProviderCategoryKeys(p: Provider): string[] {
+// ✅ Type guard: checks if a string is one of our allowed categories
+function isProviderCategory(x: string): x is ProviderCategory {
+return (PROVIDER_CATEGORIES as readonly string[]).includes(x);
+}
+
+// ✅ Return only valid ProviderCategory values (no random strings)
+function getProviderCategoryKeys(p: Provider): ProviderCategory[] {
 const a = Array.isArray(p.categories) ? p.categories : [];
 const b = Array.isArray(p.services) ? p.services : [];
-// merge + unique
-return Array.from(new Set([...a, ...b].map(String)));
+
+const merged = Array.from(new Set([...a, ...b].map(String)));
+
+return merged.filter((k): k is ProviderCategory => isProviderCategory(k));
 }
 
 function getProviderAddress(p: Provider): string {
-return (
-p.addressText ||
-p.addressFormatted ||
-p.serviceBaseLocationText ||
-""
-);
+return p.addressText || p.addressFormatted || p.serviceBaseLocationText || "";
 }
 
 export default function CustomerProvidersDirectory() {
 const router = useRouter();
 
-const [selectedCategory, setSelectedCategory] = useState<string>(PROVIDER_CATEGORIES[0]);
+// ✅ selectedCategory is typed now
+const [selectedCategory, setSelectedCategory] = useState<ProviderCategory>(
+PROVIDER_CATEGORIES[0]
+);
 const [locationSearch, setLocationSearch] = useState<string>("");
 
 const [providers, setProviders] = useState<Provider[]>([]);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState<string | null>(null);
 
-// Load ALL providers once, then filter client-side.
-// This avoids Firestore OR-query limitations (categories vs services).
 useEffect(() => {
 setLoading(true);
 setError(null);
@@ -127,7 +133,10 @@ Search by category and location, then call to schedule directly.
 </p>
 </div>
 
-<button className="text-sm underline opacity-80" onClick={() => router.back()}>
+<button
+className="text-sm underline opacity-80"
+onClick={() => router.back()}
+>
 Back
 </button>
 </div>
@@ -146,7 +155,7 @@ Back
 <select
 className="border rounded p-2 w-full"
 value={selectedCategory}
-onChange={(e) => setSelectedCategory(e.target.value)}
+onChange={(e) => setSelectedCategory(e.target.value as ProviderCategory)}
 >
 {PROVIDER_CATEGORIES.map((cat) => (
 <option key={String(cat)} value={String(cat)}>
@@ -188,7 +197,7 @@ const ratingCount = p.ratingCount ?? 0;
 
 const keys = getProviderCategoryKeys(p);
 const categoriesLabel = keys
-.map((c) => PROVIDER_CATEGORY_LABELS[c as any] ?? c)
+.map((c) => PROVIDER_CATEGORY_LABELS[c] ?? c)
 .join(" • ");
 
 const address = getProviderAddress(p);
@@ -197,20 +206,27 @@ return (
 <div key={p.id} className="border rounded-xl p-4">
 <div className="flex items-start justify-between gap-4">
 <div>
-<div className="font-semibold text-lg">{p.businessName || "Provider"}</div>
+<div className="font-semibold text-lg">
+{p.businessName || "Provider"}
+</div>
 
 {categoriesLabel ? (
-<div className="text-sm opacity-70 mt-1">{categoriesLabel}</div>
+<div className="text-sm opacity-70 mt-1">
+{categoriesLabel}
+</div>
 ) : null}
 
 <div className="text-sm mt-2">
-⭐ {ratingAvg} <span className="opacity-70">({ratingCount})</span>
+⭐ {ratingAvg}{" "}
+<span className="opacity-70">({ratingCount})</span>
 </div>
 
 {address ? (
 <div className="text-sm opacity-80 mt-2">{address}</div>
 ) : (
-<div className="text-sm opacity-60 mt-2">No address on file</div>
+<div className="text-sm opacity-60 mt-2">
+No address on file
+</div>
 )}
 </div>
 

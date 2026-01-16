@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import PreBidChat from "./PreBidChat";
-//import BidsPanel from "./BidsPanel";
+import BidsPanel from "./BidsPanel";
 
 type Job = {
 type?: string;

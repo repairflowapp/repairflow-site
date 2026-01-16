@@ -1,3 +1,5 @@
+// lib/providerCategories.ts
+
 export const PROVIDER_CATEGORIES = [
 "repair_shop",
 "parts_store",
@@ -7,8 +9,7 @@ export const PROVIDER_CATEGORIES = [
 ] as const;
 
 export type ProviderCategory = (typeof PROVIDER_CATEGORIES)[number];
-export const PROVIDER_CATEGORIES = [];
-export const PROVIDER_CATEGORY_LABELS = {};
+
 export const PROVIDER_CATEGORY_LABELS: Record<ProviderCategory, string> = {
 repair_shop: "Truck & Auto Repair Shop",
 parts_store: "Truck & Auto Parts Store",
@@ -16,3 +17,4 @@ towing_provider: "Towing & Roadside Assistance Provider",
 fleet: "Fleet",
 customer: "Customer",
 };
+
